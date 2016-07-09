@@ -7,6 +7,9 @@ var async = require('async');
 var count = 0;
 var folderRegex = /^.[^.]+$/;
 var mdRegex = /\.md$/;
+var imgRegex = /\.((jpg)|(png)|(gif))$/;
+var ignoredRegex = /(epub)|(node_modules)/;
+var delay = 1;
 /*
 	fs.readdir("./", function(err, files){
 
@@ -38,11 +41,12 @@ function Converter(){
 			function readDir(path, next){
 				//console.log("at readDir, path = " + path);
 				fs.readdir(path, function(err, files){
-					if (err){
-						//console.log(err);
-						return //kill proccess, might have been a weird file
-					}
-						next(null, path, files);
+					if (err)
+						if (err.code == "ENOTDIR")
+							return;
+						else
+							next(err);
+					next(null, path, files);
 				});
 			},
 
@@ -50,18 +54,28 @@ function Converter(){
 				//console.log("at identifyFiles, path = " + path);
 				for(let i in files){
 					let file = files[i];
-					if (folderRegex.test(file))
+					//console.log("at file: " + file);
+					if (ignoredRegex.test(file))
+						console.log("ignoring " + path + file);
+					else if (folderRegex.test(file))
 						searchDir((path + file + "/"));
 					else if (mdRegex.test(file))
 						setTimeout(function(){
-							convert((path+file), file)
-						}, 500*count++);
+							convert((path+file))
+						}, delay*count++);
+					else if (imgRegex.test(file))
+						setTimeout(function(){
+							copyImg((path+file));
+						}, delay*count++);
 				}
+
+				next(null);
 			}
 	
 		], function(err, data){
 			if (err)
-				return ;//console.log(err);
+					return console.log(err);
+
 		});
 	
 	}
@@ -88,27 +102,56 @@ function Converter(){
 			},
 
 			function saveFile(path, output, next){
-				console.log("at saveFile, path = " + path);
+				//console.log("at saveFile, path = " + path);
 				var newPath = "./epub/" + path.substring(2, path.length-2) + "html";
+				console.log("saving file: " + newPath);
 				mkdirp(getDirName(newPath), function(err){
 					if (err){
-						//console.log("error at making dir");
+						console.log("error at making dir");
 						return next(err);
 					}fs.writeFile(newPath, output, next)	
 				})
 			}
 
-			], function(err, data){
-				if(err){
-					console.log(err);
-				}
-			});
+		], function(err, data){
+			if (err){
+				console.log(err);
+			}
+		});
 	}
 
+	function copyImg(path){
+		async.waterfall([
+			function(next){
+				next(null, path);
+			},
+			function readFile(path, next){
+				////console.log("at readFile, path = " + path);
+				fs.readFile(path, function(err, txt){
+					next(err, path, txt);
+				});
+			},
 
+			function saveFile(path, output, next){
+				//console.log("at IMG saveFile, path = " + path);
+				var newPath = "./epub/" + path.substring(2, path.length);
+				console.log("saving file: " + newPath);
+				mkdirp(getDirName(newPath), function(err){
+					if (err){
+						console.log("error at making dir");
+						return next(err);
+					}fs.writeFile(newPath, output, next)	
+				})
+			}
+
+		], function(err, data){
+			if(err){
+				console.log(err);
+			}
+		});
+	}
 	var API = {
-		searchDirectory: searchDir,
-		convert: convert
+		searchDirectory: searchDir
 	}
 
 
